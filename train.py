@@ -102,20 +102,34 @@ def prepare_data(data_file):
 
     # Ausgabe der Rohdaten für "Destiny 2"
     debug_game_data = df[df['title'] == 'Destiny 2']
+    total_quality_score = 0
+    data_count = 0
+
     if not debug_game_data.empty:
         logging.info("Rohdaten für Destiny 2:")
         for index, row in debug_game_data.iterrows():
+            quality_score = calculate_quality_score(row)
+            total_quality_score += quality_score
+            data_count += 1
+
             logging.info(f"Title: {row['title']}")
             logging.info(f"GPU: {row['gpu']}")
             logging.info(f"Distribution: {row['distribution']}")
             logging.info(f"CPU: {row['cpu']}")
             logging.info(f"RAM: {row['ram']}")
             logging.info(f"Kernel: {row['kernel']}")
-            logging.info(f"Quality Score: {calculate_quality_score(row)}")
+            logging.info(f"Quality Score: {quality_score}")
             logging.info("Responses:")
             for key, value in row['responses'].items():
                 logging.info(f"  {key}: {value}")
             logging.info("---")
+
+        if data_count > 0:
+            average_quality_score = total_quality_score / data_count
+            logging.info(f"Durchschnittlicher Quality Score für Destiny 2: {average_quality_score:.2f}")
+        else:
+            logging.info("Keine Daten für Destiny 2 gefunden.")
+
 
     # Berechnen des Qualitätsscores
     logging.debug("Berechne Qualitätsscores:")
@@ -145,13 +159,13 @@ def prepare_data(data_file):
 
     # Features und Zielvariable mit Gewichtung
     X = np.column_stack((
-        df['title_encoded'] * 3,
+        df['title_encoded'] * 5,
         df['gpu_manufacturer_encoded'] * 2,
-        df['gpu_model_encoded'],
-        df['distribution_encoded'],
-        df['cpu_encoded'],
-        df['ram_encoded'],
-        df['kernel_encoded']
+        df['gpu_model_encoded'] * 0.5,
+        df['distribution_encoded'] * 0.5,
+        df['cpu_encoded'] * 0.5,
+        df['ram_encoded'] * 0.5,
+        df['kernel_encoded'] * 0.5
     ))
     y = df['quality_score'].values
 
@@ -178,7 +192,7 @@ def create_and_train_model(X_train, y_train, X_test, y_test):
 
     early_stopping = tf.keras.callbacks.EarlyStopping(patience=20, restore_best_weights=True)
 
-    history = model.fit(X_train, y_train, epochs=5, batch_size=32, validation_split=0.2,
+    history = model.fit(X_train, y_train, epochs=500, batch_size=32, validation_split=0.2,
                         callbacks=[early_stopping], verbose=1)
 
     test_loss, test_mae = model.evaluate(X_test, y_test)
