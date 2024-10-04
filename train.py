@@ -321,21 +321,6 @@ def predict_compatibility(title, gpu, distribution, cpu, ram, kernel, model, le_
     else:
         compatibility_level = "Hervorragend"
 
-    if unknown_labels or partial_info:
-        completeness_factor = 1 - (len(unknown_labels) + 0.5 * len(partial_info)) / 7
-        adjusted_score = max(0, predicted_score * completeness_factor)  # Stellen Sie sicher, dass der angepasste Score nicht negativ ist
-
-        if unknown_labels:
-            logging.debug(f"Warnung: Unbekannte oder fehlende Labels gefunden: {', '.join(unknown_labels)}")
-        if partial_info:
-            logging.debug(f"Hinweis: Teilweise Informationen verwendet für: {', '.join(partial_info)}")
-
-        logging.debug(f"Ursprünglicher Qualitätsscore: {predicted_score:.2f}")
-        logging.debug(f"Angepasster Qualitätsscore: {adjusted_score:.2f}")
-    else:
-        adjusted_score = predicted_score
-
-
     gpu_info = f"{gpu_manufacturer} {gpu_model}".strip() if gpu_model else gpu_manufacturer
     specs = [f"{gpu_info} GPU" if gpu else None,
              f"auf {distribution}" if distribution else None,
@@ -344,15 +329,16 @@ def predict_compatibility(title, gpu, distribution, cpu, ram, kernel, model, le_
              f"{kernel} Kernel" if kernel else None]
     specs = [spec for spec in specs if spec]
 
-    if specs:
-        logging.info(f"Der Titel '{title}' hat eine {compatibility_level.lower()}e Kompatibilität mit {', '.join(specs)}.")
-    else:
-        logging.info(f"Der Titel '{title}' hat basierend auf den verfügbaren Informationen eine {compatibility_level.lower()}e Kompatibilität.")
+    result = {
+        "title": title,
+        "compatibility_level": compatibility_level,
+        "quality_score": adjusted_score,
+        "specs": specs,
+        "unknown_labels": unknown_labels,
+        "partial_info": partial_info
+    }
 
-    logging.info(f"Der Qualitätsscore beträgt {adjusted_score:.2f}.")
-
-    if unknown_labels or partial_info:
-        logging.info("Hinweis: Diese Vorhersage könnte aufgrund fehlender oder unvollständiger Daten ungenau sein.")
+    return result
 
 def find_latest_archive(directory):
     pattern = os.path.join(directory, "reports_*.tar.gz")
@@ -445,45 +431,68 @@ if __name__ == "__main__":
 
         # Beispielvorhersagen
         logging.info("Beispielvorhersagen:")
-        predict_compatibility(
-            "Brewmaster: Beer Brewing Simulator",
-            "NVIDIA GeForce RTX 4070",
-            "Debian GNU/Linux 12 (bookworm)",
-            "AMD Ryzen 5 5600X 6-Core",
-            "32 GB",
-            "6.1.0-21-amd64",
-            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
-        )
+        predictions = [
+            {
+                "title": "Brewmaster: Beer Brewing Simulator",
+                "gpu": "NVIDIA GeForce RTX 4070",
+                "distribution": "Debian GNU/Linux 12 (bookworm)",
+                "cpu": "AMD Ryzen 5 5600X 6-Core",
+                "ram": "32 GB",
+                "kernel": "6.1.0-21-amd64"
+            },
+            {
+                "title": "Brewmaster: Beer Brewing Simulator",
+                "gpu": "NVIDIA",
+                "distribution": None,
+                "cpu": None,
+                "ram": None,
+                "kernel": None
+            },
+            {
+                "title": "Cyberpunk 2077",
+                "gpu": "NVIDIA GeForce RTX 2080 Ti",
+                "distribution": "Arch Linux",
+                "cpu": "AMD Ryzen 9 5950X 16-Core",
+                "ram": "32 GB",
+                "kernel": "6.10.10-arch1-1"
+            },
+            {
+                "title": "Destiny 2",
+                "gpu": "NVIDIA GeForce RTX 2080 Ti",
+                "distribution": "Arch Linux",
+                "cpu": "AMD Ryzen 9 5950X 16-Core",
+                "ram": "32 GB",
+                "kernel": "6.10.10-arch1-1"
+            }
+        ]
 
-        predict_compatibility(
-            "Brewmaster: Beer Brewing Simulator",
-            "NVIDIA",
-            None,
-            None,
-            None,
-            None,
-            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
-        )
+        # Führen Sie die Vorhersagen durch und speichern Sie die Ergebnisse
+        results = []
+        for pred in predictions:
+            result = predict_compatibility(
+                pred["title"],
+                pred["gpu"],
+                pred["distribution"],
+                pred["cpu"],
+                pred["ram"],
+                pred["kernel"],
+                model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
+            )
+            results.append(result)
 
-        predict_compatibility(
-            "Cyberpunk 2077",
-            "NVIDIA GeForce RTX 2080 Ti",
-            "Arch Linux",
-            "AMD Ryzen 9 5950X 16-Core",
-            "32 GB",
-            "6.10.10-arch1-1",
-            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
-        )
+        # Geben Sie alle Ergebnisse aus
+        for result in results:
+            print(f"\nVorhersage für: {result['title']}")
+            print(f"Kompatibilitätslevel: {result['compatibility_level']}")
+            print(f"Qualitätsscore: {result['quality_score']:.2f}")
+            if result['specs']:
+                print(f"Spezifikationen: {', '.join(result['specs'])}")
+            if result['unknown_labels']:
+                print(f"Unbekannte Labels: {', '.join(result['unknown_labels'])}")
+            if result['partial_info']:
+                print(f"Teilweise Informationen: {', '.join(result['partial_info'])}")
+            print("-" * 50)
 
-        predict_compatibility(
-            "Destiny 2",
-            "NVIDIA GeForce RTX 2080 Ti",
-            "Arch Linux",
-            "AMD Ryzen 9 5950X 16-Core",
-            "32 GB",
-            "6.10.10-arch1-1",
-            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
-        )
     except Exception as e:
         logging.error(f"Ein Fehler ist aufgetreten: {e}")
         exit(1)
