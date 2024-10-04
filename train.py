@@ -10,6 +10,11 @@ import joblib
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
+import tarfile
+import tempfile
+import glob
+from datetime import datetime
+import re
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -79,15 +84,11 @@ def calculate_quality_score(data):
     return final_score
 
 
-def prepare_data(data_file):
+def prepare_data(json_data):
     try:
-        with open(data_file, 'r') as file:
-            data = json.load(file)
-    except FileNotFoundError:
-        logging.debug(f"Fehler: Die Datei {data_file} wurde nicht gefunden.")
-        return None
+        data = json_data  # Jetzt direkt die JSON-Daten verwenden
     except json.JSONDecodeError:
-        logging.debug(f"Fehler: Die Datei {data_file} enthält ungültiges JSON.")
+        logging.error(f"Fehler: Die JSON-Daten sind ungültig.")
         return None
 
     df = pd.DataFrame(data)
@@ -192,7 +193,7 @@ def create_and_train_model(X_train, y_train, X_test, y_test):
 
     early_stopping = tf.keras.callbacks.EarlyStopping(patience=20, restore_best_weights=True)
 
-    history = model.fit(X_train, y_train, epochs=500, batch_size=32, validation_split=0.2,
+    history = model.fit(X_train, y_train, epochs=5, batch_size=32, validation_split=0.2,
                         callbacks=[early_stopping], verbose=1)
 
     test_loss, test_mae = model.evaluate(X_test, y_test)
@@ -353,70 +354,136 @@ def predict_compatibility(title, gpu, distribution, cpu, ram, kernel, model, le_
     if unknown_labels or partial_info:
         logging.info("Hinweis: Diese Vorhersage könnte aufgrund fehlender oder unvollständiger Daten ungenau sein.")
 
+def find_latest_archive(directory):
+    pattern = os.path.join(directory, "reports_*.tar.gz")
+    archives = glob.glob(pattern)
+    if not archives:
+        raise FileNotFoundError(f"Keine passenden Archive in {directory} gefunden.")
+
+    def parse_date(filename):
+       basename = os.path.basename(filename)
+       match = re.search(r'reports_(\w+)(\d+)_(\d+)', basename)
+       if not match:
+           raise ValueError(f"Konnte kein Datum aus dem Dateinamen extrahieren: {basename}")
+
+       month, day, year = match.groups()
+
+       # Konvertiere den Monatsnamen in eine Zahl
+       month_num = datetime.strptime(month, '%b').month
+
+       # Erstelle ein vollständiges Datum
+       date_str = f"{year}-{month_num:02d}-{int(day):02d}"
+       return datetime.strptime(date_str, "%Y-%m-%d")
+
+    return max(archives, key=parse_date)
+
+def extract_archive(archive_path):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with tarfile.open(archive_path, "r:gz") as tar:
+            tar.extractall(path=tmpdir)
+
+        json_file = find_json_file(tmpdir)
+
+        if json_file:
+            with open(json_file, 'r') as f:
+                json_data = json.load(f)
+            return json_data
+        else:
+            raise FileNotFoundError(f"Keine JSON-Datei im extrahierten Archiv gefunden: {archive_path}")
+
+def find_json_file(directory):
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.json'):
+                json_path = os.path.join(root, file)
+                # Optionale Validierung: Prüfen Sie, ob es sich um eine gültige JSON-Datei handelt
+                if is_valid_json(json_path):
+                    return json_path
+    return None
+
+def is_valid_json(file_path):
+    try:
+        with open(file_path, 'r') as f:
+            json.load(f)
+        return True
+    except json.JSONDecodeError:
+        return False
+
 if __name__ == "__main__":
     #data_file = 'mock_data.json'
-    data_file = "/home/alex/workspace/own/caniplayonlinux/protondb-data/reports/reports_sep1_2024/reports_piiremoved.json"
+    #data_file = "/home/alex/workspace/own/caniplayonlinux/protondb-data/reports/reports_sep1_2024/reports_piiremoved.json"
+    data_directory = "/home/alex/workspace/own/caniplayonlinux/protondb-data/reports/"
 
-    if not os.path.exists('saved_model/my_model.keras'):
-        logging.info("Kein gespeichertes Modell gefunden. Erstelle und trainiere neues Modell...")
+    try:
+        if not os.path.exists('saved_model/my_model.keras'):
+            logging.info("Kein gespeichertes Modell gefunden. Erstelle und trainiere neues Modell...")
 
-        logging.debug("Lade und bereite Daten vor...")
-        result = prepare_data(data_file)
-        if result is None:
-            logging.error("Fehler beim Laden der Daten. Beende Programm.")
-            exit(1)
-        X_train, X_test, y_train, y_test, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler = result
+            latest_archive = find_latest_archive(data_directory)
+            logging.info(f"Neuestes Archiv gefunden: {latest_archive}")
 
-        logging.debug("Qualitätsscores:")
-        for score in y_train:
-            logging.debug(score)
+            json_data = extract_archive(latest_archive)
+            logging.info(f"JSON-Daten erfolgreich extrahiert und geladen")
 
-        model, history = create_and_train_model(X_train, y_train, X_test, y_test)
-        plot_training_history(history)
-        save_model_and_encoders(model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler)
-    else:
-        logging.info("Gespeichertes Modell gefunden. Lade Modell...")
-        model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler = load_model_and_encoders()
-        logging.info("Modell und LabelEncoder-Objekte wurden geladen.")
+            logging.debug("Bereite Daten vor...")
+            result = prepare_data(json_data)
+            if result is None:
+                logging.error("Fehler beim Laden der Daten. Beende Programm.")
+                exit(1)
+            X_train, X_test, y_train, y_test, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler = result
 
-    # Beispielvorhersagen
-    logging.info("Beispielvorhersagen:")
-    predict_compatibility(
-        "Brewmaster: Beer Brewing Simulator",
-        "NVIDIA GeForce RTX 4070",
-        "Debian GNU/Linux 12 (bookworm)",
-        "AMD Ryzen 5 5600X 6-Core",
-        "32 GB",
-        "6.1.0-21-amd64",
-        model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
-    )
+            logging.debug("Qualitätsscores:")
+            for score in y_train:
+                logging.debug(score)
 
-    predict_compatibility(
-        "Brewmaster: Beer Brewing Simulator",
-        "NVIDIA",
-        None,
-        None,
-        None,
-        None,
-        model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
-    )
+            model, history = create_and_train_model(X_train, y_train, X_test, y_test)
+            plot_training_history(history)
+            save_model_and_encoders(model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler)
+        else:
+            logging.info("Gespeichertes Modell gefunden. Lade Modell...")
+            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler = load_model_and_encoders()
+            logging.info("Modell und LabelEncoder-Objekte wurden geladen.")
 
-    predict_compatibility(
-        "Cyberpunk 2077",
-        "NVIDIA GeForce RTX 2080 Ti",
-        "Arch Linux",
-        "AMD Ryzen 9 5950X 16-Core",
-        "32 GB",
-        "6.10.10-arch1-1",
-        model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
-    )
+        # Beispielvorhersagen
+        logging.info("Beispielvorhersagen:")
+        predict_compatibility(
+            "Brewmaster: Beer Brewing Simulator",
+            "NVIDIA GeForce RTX 4070",
+            "Debian GNU/Linux 12 (bookworm)",
+            "AMD Ryzen 5 5600X 6-Core",
+            "32 GB",
+            "6.1.0-21-amd64",
+            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
+        )
 
-    predict_compatibility(
-        "Destiny 2",
-        "NVIDIA GeForce RTX 2080 Ti",
-        "Arch Linux",
-        "AMD Ryzen 9 5950X 16-Core",
-        "32 GB",
-        "6.10.10-arch1-1",
-        model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
-    )
+        predict_compatibility(
+            "Brewmaster: Beer Brewing Simulator",
+            "NVIDIA",
+            None,
+            None,
+            None,
+            None,
+            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
+        )
+
+        predict_compatibility(
+            "Cyberpunk 2077",
+            "NVIDIA GeForce RTX 2080 Ti",
+            "Arch Linux",
+            "AMD Ryzen 9 5950X 16-Core",
+            "32 GB",
+            "6.10.10-arch1-1",
+            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
+        )
+
+        predict_compatibility(
+            "Destiny 2",
+            "NVIDIA GeForce RTX 2080 Ti",
+            "Arch Linux",
+            "AMD Ryzen 9 5950X 16-Core",
+            "32 GB",
+            "6.10.10-arch1-1",
+            model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
+        )
+    except Exception as e:
+        logging.error(f"Ein Fehler ist aufgetreten: {e}")
+        exit(1)
