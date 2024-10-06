@@ -183,7 +183,7 @@ def create_and_train_model(X_train, y_train, X_test, y_test):
 
     early_stopping = tf.keras.callbacks.EarlyStopping(patience=20, restore_best_weights=True)
 
-    history = model.fit(X_train, y_train, epochs=5, batch_size=32, validation_split=0.2,
+    history = model.fit(X_train, y_train, epochs=500, batch_size=32, validation_split=0.2,
                         callbacks=[early_stopping], verbose=1)
 
     test_loss, test_mae = model.evaluate(X_test, y_test)
