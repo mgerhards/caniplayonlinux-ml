@@ -29,37 +29,48 @@ def calculate_quality_score(data):
     max_score = 0
 
     quality_fields = [
-        'audioFaults', 'graphicalFaults', 'inputFaults', 'performanceFaults',
-        'saveGameFaults', 'significantBugs', 'stabilityFaults', 'windowingFaults'
+        {'name': 'audioFaults', 'weight': 1},
+        {'name': 'graphicalFaults', 'weight': 1.5},
+        {'name': 'inputFaults', 'weight': 1.2},
+        {'name': 'performanceFaults', 'weight': 1.8},
+        {'name': 'saveGameFaults', 'weight': 0.8},
+        {'name': 'significantBugs', 'weight': 2},
+        {'name': 'stabilityFaults', 'weight': 1.5},
+        {'name': 'windowingFaults', 'weight': 0.7}
     ]
-    functionality_fields = ['installs', 'opens', 'startsPlay']
+    functionality_fields = [
+        {'name': 'installs', 'weight': 3},
+        {'name': 'opens', 'weight': 3},
+        {'name': 'startsPlay', 'weight': 8}
+    ]
 
     logging.debug("Einzelne Bewertungen:")
     for field in quality_fields:
-        if field in responses:
-            max_score += 1
-            if responses[field] == 'no':
-                score += 1
-            logging.debug(f"{field}: {responses[field]} (+{1 if responses[field] == 'no' else 0})")
+        if field['name'] in responses:
+            max_score += field['weight']
+            if responses[field['name']] == 'no':
+                score += field['weight']
+            logging.debug(f"{field['name']}: {responses[field['name']]} (+{field['weight'] if responses[field['name']] == 'no' else 0})")
         else:
-            logging.debug(f"{field}: nicht gefunden")
+            logging.debug(f"{field['name']}: nicht gefunden")
 
     for field in functionality_fields:
-        if field in responses:
-            max_score += 4
-            if responses[field] == 'no':
+        if field['name'] in responses:
+            max_score += field['weight']
+            if responses[field['name']] == 'no':
                 return 0
-            elif responses[field] == 'yes':
-                score += 4
-            logging.debug(f"{field}: {responses[field]} (+{4 if responses[field] == 'yes' else 0})")
+            elif responses[field['name']] == 'yes':
+                score += field['weight']
+            logging.debug(f"{field['name']}: {responses[field['name']]} (+{field['weight'] if responses[field['name']] == 'yes' else 0})")
         else:
-            logging.debug(f"{field}: nicht gefunden")
+            logging.debug(f"{field['name']}: nicht gefunden")
 
     if 'triedOob' in responses:
-        max_score += 5
+        oob_weight = 5
+        max_score += oob_weight
         if responses['triedOob'] == 'yes':
-            score += 5
-        logging.debug(f"triedOob: {responses['triedOob']} (+{5 if responses['triedOob'] == 'yes' else 0})")
+            score += oob_weight
+        logging.debug(f"triedOob: {responses['triedOob']} (+{oob_weight if responses['triedOob'] == 'yes' else 0})")
     else:
         logging.debug("triedOob: nicht gefunden")
 
