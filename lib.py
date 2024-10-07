@@ -1,5 +1,27 @@
-import pandas as pd
+import tensorflow as tf
+import joblib
+import os
 import numpy as np
+import pandas as pd
+
+def load_model_and_encoders(model_dir='saved_model'):
+    if not os.path.exists(model_dir):
+        raise FileNotFoundError(f"Das Verzeichnis {model_dir} existiert nicht.")
+
+    try:
+        loaded_model = tf.keras.models.load_model(f'{model_dir}/my_model.keras')
+        le_title = joblib.load(f'{model_dir}/le_title.joblib')
+        le_gpu_manufacturer = joblib.load(f'{model_dir}/le_gpu_manufacturer.joblib')
+        le_gpu_model = joblib.load(f'{model_dir}/le_gpu_model.joblib')
+        le_distribution = joblib.load(f'{model_dir}/le_distribution.joblib')
+        le_cpu = joblib.load(f'{model_dir}/le_cpu.joblib')
+        le_ram = joblib.load(f'{model_dir}/le_ram.joblib')
+        le_kernel = joblib.load(f'{model_dir}/le_kernel.joblib')
+        scaler = joblib.load(f'{model_dir}/scaler.joblib')
+
+        return loaded_model, le_title, le_gpu_manufacturer, le_gpu_model, le_distribution, le_cpu, le_ram, le_kernel, scaler
+    except Exception as e:
+        raise Exception(f"Fehler beim Laden des Modells oder der Encoder: {str(e)}")
 
 def extract_gpu_info(gpu_string):
     if pd.isna(gpu_string) or gpu_string is None or gpu_string == "":

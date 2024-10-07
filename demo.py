@@ -1,6 +1,5 @@
 import re
-from utils import load_model_and_encoders
-from lib import predict_compatibility
+from lib import load_model_and_encoders, predict_compatibility
 
 def extract_system_info(system_info_str):
     cpu_match = re.search(r'CPU Brand: (.+)', system_info_str)
