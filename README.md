@@ -31,7 +31,7 @@ jupyter lab
 
 Copy the token from the command line output and register the remote kernel in your IDE.
 
-### Step 5: Run Notebook
+### Step 5: Run Notebooks
 Run the caniplayonlinux.ipynb notebook to create the trainset in the /data directory.
 
 ### Prerequisites
